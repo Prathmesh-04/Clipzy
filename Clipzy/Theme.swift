@@ -1,6 +1,8 @@
 import SwiftUI
+import CoreText
+import UIKit
 
-// MARK: - Premium studio color system (same hex values as the Android app)
+// MARK: - ClipZ brand tokens (taken from the clipz-landing site: cobalt / yellow / ink / paper)
 
 extension Color {
     init(hex: UInt32) {
@@ -14,34 +16,27 @@ extension Color {
 }
 
 enum Theme {
-    static let bgDeep = Color(hex: 0xFF08090D)
-    static let surface1 = Color(hex: 0xFF11131B)
-    static let surface2 = Color(hex: 0xFF181C28)
-    static let surface3 = Color(hex: 0xFF222738)
-    static let border = Color(hex: 0xFF282E42)
-    static let textWhite = Color(hex: 0xFFF5F7FF)
-    static let textMuted = Color(hex: 0xFF8E96AA)
-    static let coral = Color(hex: 0xFFFF7A59)
-    static let amber = Color(hex: 0xFFE05A47)
-    static let blue = Color(hex: 0xFF58A6FF)
-    static let violet = Color(hex: 0xFFA78BFA)
-    static let green = Color(hex: 0xFF34D399)
-    static let yellow = Color(hex: 0xFFFBBF24)
-    static let red = Color(hex: 0xFFF87171)
-    static let ink = Color(hex: 0xFF090A0F)
-
-    static let accentGradient = LinearGradient(colors: [coral, amber], startPoint: .leading, endPoint: .trailing)
-    static let brainstormGradient = LinearGradient(colors: [blue, Color(hex: 0xFF3B82F6)], startPoint: .leading, endPoint: .trailing)
-    static let styleGradient = LinearGradient(colors: [Color(hex: 0xFF8B5CF6), Color(hex: 0xFF6366F1)], startPoint: .leading, endPoint: .trailing)
-    static let heroGradient = LinearGradient(colors: [Color(hex: 0xFF191D2B), Color(hex: 0xFF11131B)], startPoint: .top, endPoint: .bottom)
-    static let disabledGradient = LinearGradient(colors: [surface3, surface3], startPoint: .leading, endPoint: .trailing)
+    static let cobalt = Color(hex: 0xFF2430FF)
+    static let cobaltDeep = Color(hex: 0xFF1A22C9)
+    static let ink = Color(hex: 0xFF0B0B14)
+    static let ink2 = Color(hex: 0xFF14142A)
+    static let ink3 = Color(hex: 0xFF1C1C38)
+    static let paper = Color(hex: 0xFFF2F0FF)
+    static let white = Color.white
+    static let yellow = Color(hex: 0xFFFFD400)
+    static let muted = Color(hex: 0xFF8B8FD9)
+    static let line = Color(hex: 0xFF2A2A44)
+    static let lineLight = Color(hex: 0xFFD8D5F5)
+    static let green = Color(hex: 0xFF7CF29A)
+    static let red = Color(hex: 0xFFFF6B6B)
+    static let periwinkle = Color(hex: 0xFF8B8FD9)
 
     static func statusColor(_ status: String) -> Color {
         switch status.lowercased() {
         case "ready", "done": return green
         case "failed", "error": return red
         case "processing", "queued": return yellow
-        default: return textMuted
+        default: return muted
         }
     }
 }
@@ -52,27 +47,96 @@ func formatTimestamp(_ raw: String) -> String {
     return s.components(separatedBy: ".").first ?? s
 }
 
-// MARK: - Text helper
+// MARK: - Fonts (Unbounded display, Hanken Grotesk body, JetBrains Mono labels)
 
-extension Font {
-    static func clipz(_ size: CGFloat, _ weight: Font.Weight = .regular, mono: Bool = false) -> Font {
-        .system(size: size, weight: weight, design: mono ? .monospaced : .default)
+enum AppFonts {
+    static func register() {
+        let urls = (Bundle.main.urls(forResourcesWithExtension: "ttf", subdirectory: nil) ?? [])
+            + (Bundle.main.urls(forResourcesWithExtension: "ttf", subdirectory: "Fonts") ?? [])
+        for url in urls {
+            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+        }
     }
 }
 
-// MARK: - Card / chip containers
+extension Font {
+    static func display(_ size: CGFloat, _ weight: Font.Weight = .black) -> Font {
+        .custom("Unbounded", size: size).weight(weight)
+    }
+    static func ui(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        .custom("Hanken Grotesk", size: size).weight(weight)
+    }
+    static func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        .custom("JetBrains Mono", size: size).weight(weight)
+    }
+}
+
+// MARK: - Haptics
+
+enum Haptics {
+    static func tap() { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+    static func select() { UISelectionFeedbackGenerator().selectionChanged() }
+    static func success() { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+    static func error() { UINotificationFeedbackGenerator().notificationOccurred(.error) }
+}
+
+// MARK: - Neo-brutalist building blocks (hard offset shadows, 2px ink borders, pill buttons)
+
+extension View {
+    /// Solid offset shadow like the site's `5px 5px 0 ink`.
+    func hardShadow(_ color: Color = Theme.ink, offset: CGFloat = 4, radius: CGFloat = 16) -> some View {
+        background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(color).offset(x: offset, y: offset))
+    }
+}
+
+struct BrutalButtonStyle: ButtonStyle {
+    var fill: Color = Theme.yellow
+    var foreground: Color = Theme.ink
+    var shadow: Color = Theme.ink
+    var stroke: Color? = nil
+    var offset: CGFloat = 4
+
+    func makeBody(configuration: Configuration) -> some View {
+        let pressed = configuration.isPressed
+        configuration.label
+            .foregroundStyle(foreground)
+            .background(Capsule().fill(fill))
+            .overlay { if let stroke { Capsule().stroke(stroke, lineWidth: 2) } }
+            .background(Capsule().fill(shadow).offset(x: pressed ? 1 : offset, y: pressed ? 1 : offset))
+            .offset(x: pressed ? offset - 1 : 0, y: pressed ? offset - 1 : 0)
+            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: pressed)
+            .contentShape(Capsule())
+    }
+}
+
+/// Plain pressable (scales slightly) for tappable cards.
+struct PressableStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(.spring(response: 0.25, dampingFraction: 0.75), value: configuration.isPressed)
+    }
+}
 
 struct Card<Content: View>: View {
-    var fill: Color = Theme.surface1
-    var radius: CGFloat = 14
-    var stroke: Color = Theme.border
-    var lineWidth: CGFloat = 1
+    var fill: Color = Theme.ink2
+    var radius: CGFloat = 20
+    var stroke: Color = Theme.line
+    var lineWidth: CGFloat = 1.5
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         content()
-            .background(fill, in: RoundedRectangle(cornerRadius: radius))
-            .overlay(RoundedRectangle(cornerRadius: radius).stroke(stroke, lineWidth: lineWidth))
+            .background(fill, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).stroke(stroke, lineWidth: lineWidth))
+    }
+}
+
+struct Eyebrow: View {
+    let text: String
+    var color: Color = Theme.muted
+    var body: some View {
+        Text(text.uppercased()).font(.mono(11, .bold)).tracking(1.6).foregroundStyle(color)
     }
 }
 
@@ -80,89 +144,177 @@ struct StatusPill: View {
     let status: String
     var body: some View {
         let c = Theme.statusColor(status)
-        Text(status.uppercased())
-            .font(.clipz(9.5, .heavy))
-            .foregroundStyle(c)
-            .padding(.horizontal, 7).padding(.vertical, 2)
-            .background(c.opacity(0.15), in: Capsule())
-            .overlay(Capsule().stroke(c.opacity(0.45), lineWidth: 1))
+        HStack(spacing: 5) {
+            Circle().fill(c).frame(width: 6, height: 6)
+            Text(status.uppercased()).font(.mono(10, .bold)).foregroundStyle(c)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 3)
+        .background(c.opacity(0.12), in: Capsule())
+        .overlay(Capsule().stroke(c.opacity(0.4), lineWidth: 1))
     }
 }
 
-struct FilledButton: View {
+/// Yellow primary pill with the site's hard shadow.
+struct PrimaryButton: View {
     let title: String
+    var icon: IconKind?
+    var enabled = true
+    var shadow: Color = Theme.ink
+    var fullWidth = false
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            Haptics.tap()
+            action()
+        } label: {
+            HStack(spacing: 8) {
+                if let icon { VectorIcon(kind: icon, size: 16, color: Theme.ink) }
+                Text(title).font(.display(13, .bold)).lineLimit(1).minimumScaleFactor(0.8)
+            }
+            .padding(.horizontal, 20).frame(height: 46)
+            .frame(maxWidth: fullWidth ? .infinity : nil)
+            .opacity(enabled ? 1 : 0.45)
+        }
+        .buttonStyle(BrutalButtonStyle(fill: Theme.yellow, shadow: enabled ? shadow : .clear))
+        .disabled(!enabled)
+    }
+}
+
+struct GhostButton: View {
+    let title: String
+    var color: Color = Theme.paper
     var enabled = true
     let action: () -> Void
+
     var body: some View {
-        Button(action: action) {
-            Text(title).font(.clipz(12, .heavy)).foregroundStyle(.black)
-                .padding(.horizontal, 14).padding(.vertical, 9)
-                .background(Theme.coral.opacity(enabled ? 1 : 0.4), in: RoundedRectangle(cornerRadius: 10))
+        Button {
+            Haptics.tap()
+            action()
+        } label: {
+            Text(title).font(.ui(13.5, .bold)).foregroundStyle(color.opacity(enabled ? 1 : 0.4))
+                .padding(.horizontal, 16).frame(height: 42)
+                .overlay(Capsule().stroke(color.opacity(enabled ? 0.55 : 0.2), lineWidth: 1.5))
+                .contentShape(Capsule())
         }
-        .buttonStyle(.plain).disabled(!enabled)
+        .buttonStyle(PressableStyle())
+        .disabled(!enabled)
     }
 }
 
-struct OutlinedBtn: View {
-    let title: String
-    var color: Color = Theme.textWhite
-    var stroke: Color = Theme.border
-    var size: CGFloat = 12
-    var weight: Font.Weight = .regular
-    var enabled = true
-    var radius: CGFloat = 10
-    let action: () -> Void
-    var body: some View {
-        Button(action: action) {
-            Text(title).font(.clipz(size, weight)).foregroundStyle(color.opacity(enabled ? 1 : 0.4))
-                .padding(.horizontal, 14).padding(.vertical, 9)
-                .overlay(RoundedRectangle(cornerRadius: radius).stroke(stroke, lineWidth: 1))
-        }
-        .buttonStyle(.plain).disabled(!enabled)
-    }
-}
-
-// MARK: - Capsule text input
+// MARK: - Text input
 
 struct StyledCapsuleInput: View {
     @Binding var text: String
     let placeholder: String
-    let accent: Color
+    var accent: Color = Theme.yellow
     var singleLine = false
     var maxLines = 4
+    var light = false
     var onSend: (() -> Void)?
     var focus: FocusState<Bool>.Binding?
 
     @FocusState private var localFocus: Bool
 
     var body: some View {
-        let field = TextField("", text: $text, prompt: Text(placeholder).foregroundColor(Theme.textMuted).font(.clipz(13.5)),
+        let isURLOrKey = placeholder.contains("URL") || placeholder.contains("Key")
+        let phColor = light ? Theme.ink.opacity(0.4) : Theme.muted
+        let field = TextField("", text: $text,
+                              prompt: Text(placeholder).foregroundColor(phColor).font(.ui(14.5)),
                               axis: singleLine ? .horizontal : .vertical)
             .lineLimit(singleLine ? 1...1 : 1...maxLines)
-            .font(.clipz(14))
-            .foregroundStyle(Theme.textWhite)
-            .tint(accent)
-            .textInputAutocapitalization(singleLine && placeholder.contains("URL") ? .never : .sentences)
-            .autocorrectionDisabled(placeholder.contains("URL") || placeholder.contains("Key"))
+            .font(.ui(15.5, .medium))
+            .foregroundStyle(light ? Theme.ink : Theme.paper)
+            .tint(light ? Theme.cobalt : accent)
+            .textInputAutocapitalization(isURLOrKey ? .never : .sentences)
+            .autocorrectionDisabled(isURLOrKey)
             .submitLabel(onSend != nil ? .send : .done)
-            .onSubmit { onSend?() }
+            .onSubmit {
+                if let onSend { onSend() } else { localFocus = false; focus?.wrappedValue = false }
+            }
 
+        let focused = focus?.wrappedValue ?? localFocus
         Group {
             if let focus { field.focused(focus) } else { field.focused($localFocus) }
         }
-        .padding(.horizontal, 15).padding(.vertical, 12)
-        .background(Theme.surface2, in: RoundedRectangle(cornerRadius: 18))
+        .padding(.horizontal, 16).padding(.vertical, 13)
+        .background(light ? Color.white : Theme.ink, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .stroke((focus?.wrappedValue ?? localFocus) ? accent : Theme.border,
-                        lineWidth: (focus?.wrappedValue ?? localFocus) ? 1.5 : 1)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(light ? (focused ? Theme.cobalt : Theme.ink) : (focused ? accent : Theme.line),
+                        lineWidth: light ? 2 : (focused ? 2 : 1.5))
         )
+        .animation(.easeOut(duration: 0.15), value: focused)
     }
 }
 
-// MARK: - Custom vector icons (ported from the Canvas drawings)
+// MARK: - Decorative
 
-enum IconKind { case play, upload, download, send, back, gear }
+struct DotPattern: View {
+    var body: some View {
+        Canvas { ctx, size in
+            var y: CGFloat = 3
+            while y < size.height {
+                var x: CGFloat = 3
+                while x < size.width {
+                    ctx.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 1.4, height: 1.4)), with: .color(.white.opacity(0.9)))
+                    x += 8
+                }
+                y += 8
+            }
+        }
+        .opacity(0.09)
+        .allowsHitTesting(false)
+    }
+}
+
+/// Yellow tape strip that scrolls, like the site's marquee.
+struct MarqueeTape: View {
+    private let segment = "✦ SILENCE CUTS  ✦ WORD CAPTIONS  ✦ MEMES & LOGOS  ✦ MUSIC & SFX  ✦ 9:16 EXPORT  "
+    private let width: CGFloat = 640
+
+    var body: some View {
+        // The wide scrolling row lives in an overlay so it can't influence the layout width.
+        Color.clear
+            .frame(height: 44)
+            .overlay(alignment: .leading) {
+                TimelineView(.animation) { tl in
+                    let x = -CGFloat((tl.date.timeIntervalSinceReferenceDate * 32).truncatingRemainder(dividingBy: Double(width)))
+                    HStack(spacing: 0) {
+                        ForEach(0..<8, id: \.self) { _ in
+                            Text(segment).font(.mono(13, .bold)).foregroundStyle(Theme.ink).lineLimit(1)
+                                .fixedSize()
+                                .frame(width: width, alignment: .leading)
+                        }
+                    }
+                    .offset(x: x)
+                }
+            }
+            .background(Theme.yellow)
+            .overlay(alignment: .top) { Rectangle().fill(Theme.ink).frame(height: 2) }
+            .overlay(alignment: .bottom) { Rectangle().fill(Theme.ink).frame(height: 2) }
+            .clipped()
+    }
+}
+
+struct TypingDots: View {
+    var body: some View {
+        TimelineView(.animation) { tl in
+            let t = tl.date.timeIntervalSinceReferenceDate
+            HStack(spacing: 5) {
+                ForEach(0..<3, id: \.self) { i in
+                    Circle().fill(Theme.yellow)
+                        .frame(width: 7, height: 7)
+                        .opacity(0.35 + 0.65 * abs(sin(t * 3 - Double(i) * 0.6)))
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Custom vector icons
+
+enum IconKind { case play, upload, download, send, back, gear, close }
 
 struct VectorIcon: View {
     let kind: IconKind
@@ -201,6 +353,11 @@ struct VectorIcon: View {
                            with: .color(color), lineWidth: w * 0.13)
                 let d = w * 0.08
                 ctx.fill(Path(ellipseIn: CGRect(x: w / 2 - d, y: h / 2 - d, width: d * 2, height: d * 2)), with: .color(color))
+            case .close:
+                var p = Path()
+                p.move(to: pt(0.25, 0.25)); p.addLine(to: pt(0.75, 0.75))
+                p.move(to: pt(0.75, 0.25)); p.addLine(to: pt(0.25, 0.75))
+                stroke(p, 0.13)
             }
         }
         .frame(width: size, height: size)

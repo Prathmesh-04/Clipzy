@@ -37,7 +37,7 @@ final class ClipzViewModel {
     var uploadProgress: Double?
     var uploadStatusText = ""
     var renderProgress: Double?
-    var error: String?
+    var error: String? { didSet { if error != nil { Haptics.error() } } }
     var bannerNotice: String?
 
     var playingRenderUrl: String?
@@ -82,6 +82,7 @@ final class ClipzViewModel {
 
     func showNotice(_ msg: String) {
         bannerNotice = msg
+        Haptics.success()
         noticeTask?.cancel()
         noticeTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(3))

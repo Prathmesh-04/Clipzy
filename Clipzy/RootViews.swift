@@ -30,25 +30,23 @@ struct ClipzStudioRoot: View {
 
     var body: some View {
         ZStack {
-            Theme.bgDeep.ignoresSafeArea()
+            Theme.ink.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 if !isKeyboardOpen {
                     StudioTopBar(
-                        inStudio: vm.inStudio,
+                        inStudio: vm.inStudio && vm.selected != nil,
                         selectedProject: vm.selected,
                         serverHealthy: vm.serverHealthy,
-                        onBackToReels: { vm.inStudio = false },
-                        onOpenGuide: { showGuide = true },
-                        onOpenSettings: { showSettings = true }
+                        onBackToReels: { Haptics.tap(); vm.inStudio = false },
+                        onOpenGuide: { Haptics.tap(); showGuide = true },
+                        onOpenSettings: { Haptics.tap(); showSettings = true }
                     )
                 }
 
                 if let err = vm.error {
-                    AlertStrip(text: err, isError: true) { vm.clearError() }
-                }
-                if let notice = vm.bannerNotice {
-                    AlertStrip(text: notice, isError: false) { vm.clearNotice() }
+                    ErrorStrip(text: err) { vm.clearError() }
+                        .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
                 if !vm.inStudio || vm.selected == nil {
@@ -57,6 +55,17 @@ struct ClipzStudioRoot: View {
                     UnifiedStudioScreen(vm: vm, isKeyboardOpen: isKeyboardOpen)
                 }
             }
+
+            // Notices float above the content instead of pushing the layout around.
+            VStack {
+                Spacer()
+                if let notice = vm.bannerNotice {
+                    Toast(text: notice) { vm.clearNotice() }
+                        .padding(.horizontal, 16).padding(.bottom, isKeyboardOpen ? 12 : 24)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .allowsHitTesting(vm.bannerNotice != nil)
 
             if showSettings {
                 WorkspaceDialog(currentKey: vm.key, currentUrl: vm.baseUrl,
@@ -68,7 +77,16 @@ struct ClipzStudioRoot: View {
             }
         }
         .preferredColorScheme(.dark)
-        .tint(Theme.coral)
+        .tint(Theme.yellow)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                }
+                .font(.ui(16, .bold))
+            }
+        }
         .onAppear { vm.loadProjects() }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             withAnimation(.easeOut(duration: 0.2)) { isKeyboardOpen = true }
@@ -76,11 +94,14 @@ struct ClipzStudioRoot: View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             withAnimation(.easeOut(duration: 0.2)) { isKeyboardOpen = false }
         }
-        .animation(.easeInOut(duration: 0.2), value: vm.bannerNotice)
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: vm.bannerNotice)
+        .animation(.easeOut(duration: 0.2), value: vm.error)
+        .animation(.easeInOut(duration: 0.2), value: showSettings)
+        .animation(.easeInOut(duration: 0.2), value: showGuide)
     }
 }
 
-// MARK: - Top bar & alerts
+// MARK: - Top bar, toast, error strip
 
 struct StudioTopBar: View {
     let inStudio: Bool
@@ -95,85 +116,102 @@ struct StudioTopBar: View {
             if inStudio, let project = selectedProject {
                 Button(action: onBackToReels) {
                     HStack(spacing: 6) {
-                        VectorIcon(kind: .back, size: 14, color: Theme.textWhite)
-                        Text("Reels").font(.clipz(12, .semibold)).foregroundStyle(Theme.textWhite)
+                        VectorIcon(kind: .back, size: 14, color: Theme.white)
+                        Text("Reels").font(.ui(13.5, .bold)).foregroundStyle(Theme.white)
                     }
-                    .padding(.horizontal, 10).padding(.vertical, 7)
-                    .background(Theme.surface2, in: RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.border))
+                    .padding(.horizontal, 12).frame(height: 38)
+                    .background(Theme.ink.opacity(0.35), in: Capsule())
+                    .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableStyle())
+                .accessibilityLabel("Back to reels")
 
-                HStack(spacing: 7) {
+                HStack(spacing: 8) {
                     Circle().fill(Theme.statusColor(project.status)).frame(width: 8, height: 8)
-                    Text(project.name).font(.clipz(14, .bold)).foregroundStyle(Theme.textWhite).lineLimit(1)
+                    Text(project.name).font(.display(13, .bold)).foregroundStyle(Theme.white).lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                HStack(spacing: 8) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 8).fill(Theme.accentGradient)
-                        VectorIcon(kind: .play, size: 14, color: Color(hex: 0xFF0B0C10))
-                    }
-                    .frame(width: 30, height: 30)
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack(spacing: 0) {
-                            Text("ClipZ").font(.clipz(16, .heavy)).foregroundStyle(Theme.textWhite)
-                            Text(" Studio").font(.clipz(16, .bold)).foregroundStyle(Theme.coral)
-                        }
-                        Text("AI Reel Director").font(.clipz(10.5)).foregroundStyle(Theme.textMuted)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Wordmark()
+                Spacer(minLength: 0)
             }
 
             Button(action: onOpenGuide) {
-                Text("Guide").font(.clipz(11.5, .semibold)).foregroundStyle(Theme.blue)
-                    .padding(.horizontal, 9).padding(.vertical, 7)
-                    .background(Theme.surface2, in: RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.border))
+                Text("Guide").font(.display(11, .bold)).foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 14).frame(height: 38)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(BrutalButtonStyle(fill: Theme.yellow, shadow: Theme.ink, offset: 3))
+            .accessibilityLabel("How to use ClipZ")
 
             Button(action: onOpenSettings) {
-                HStack(spacing: 5) {
+                HStack(spacing: 6) {
                     Circle().fill(serverHealthy == true ? Theme.green : serverHealthy == false ? Theme.red : Theme.yellow)
-                        .frame(width: 7, height: 7)
-                    VectorIcon(kind: .gear, size: 12, color: Theme.textMuted)
-                    Text(serverHealthy == true ? "Live API" : "Server")
-                        .font(.clipz(11, .semibold)).foregroundStyle(Theme.textWhite)
+                        .frame(width: 8, height: 8)
+                    VectorIcon(kind: .gear, size: 13, color: Theme.white)
                 }
-                .padding(.horizontal, 9).padding(.vertical, 7)
-                .background(Theme.surface2, in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.border))
+                .padding(.horizontal, 12).frame(height: 38)
+                .background(Theme.ink.opacity(0.35), in: Capsule())
+                .contentShape(Capsule())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressableStyle())
+            .accessibilityLabel(serverHealthy == true ? "Server connected. Open settings" : "Server not connected. Open settings")
         }
-        .padding(.horizontal, 14).padding(.vertical, 10)
+        .padding(.horizontal, 16).padding(.vertical, 10)
         .frame(maxWidth: .infinity)
-        .background(Theme.surface1)
-        .overlay(alignment: .bottom) { Rectangle().fill(Theme.border).frame(height: 1) }
+        .background(Theme.cobalt)
+        .overlay(alignment: .bottom) { Rectangle().fill(.white.opacity(0.14)).frame(height: 1) }
     }
 }
 
-struct AlertStrip: View {
+struct Wordmark: View {
+    var size: CGFloat = 24
+    var body: some View {
+        HStack(spacing: 0) {
+            Text("Clip").foregroundStyle(Theme.white)
+            Text("Z").foregroundStyle(Theme.yellow)
+        }
+        .font(.display(size, .black)).tracking(-size * 0.04)
+    }
+}
+
+struct ErrorStrip: View {
     let text: String
-    let isError: Bool
     let onDismiss: () -> Void
 
     var body: some View {
-        let accent = isError ? Theme.red : Theme.green
-        HStack(spacing: 8) {
-            Circle().fill(accent).frame(width: 7, height: 7)
-            Text(text).font(.clipz(12)).foregroundStyle(Theme.textWhite)
+        HStack(alignment: .top, spacing: 10) {
+            Text("!").font(.mono(12, .bold)).foregroundStyle(Theme.ink)
+                .frame(width: 20, height: 20).background(Theme.red, in: Circle())
+            Text(text).font(.ui(13.5, .medium)).foregroundStyle(Theme.paper)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button(action: onDismiss) {
-                Text("Dismiss").font(.clipz(11, .bold)).foregroundStyle(accent)
+                VectorIcon(kind: .close, size: 18, color: Theme.paper.opacity(0.8))
+                    .frame(width: 32, height: 32).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss error")
         }
-        .padding(.horizontal, 14).padding(.vertical, 8)
-        .background(isError ? Color(hex: 0xFF331619) : Color(hex: 0xFF132A20))
+        .padding(.horizontal, 16).padding(.vertical, 10)
+        .background(Color(hex: 0xFF3A1620))
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.red.opacity(0.5)).frame(height: 1) }
+    }
+}
+
+struct Toast: View {
+    let text: String
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text("✦").foregroundStyle(Theme.cobalt)
+            Text(text).font(.ui(14, .bold)).foregroundStyle(Theme.ink).lineLimit(2)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 12)
+        .background(Theme.paper, in: Capsule())
+        .overlay(Capsule().stroke(Theme.ink, lineWidth: 2))
+        .background(Capsule().fill(Theme.cobalt).offset(x: 3, y: 3))
+        .onTapGesture(perform: onDismiss)
     }
 }
 
@@ -188,43 +226,20 @@ struct ReelsHomeScreen: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: 18) {
-                HStack(spacing: 8) {
-                    StepPill(num: "1", label: "Pick Reel", active: true)
-                    StepPill(num: "2", label: "AI Direct / Style", active: false)
-                    StepPill(num: "3", label: "Preview & Save", active: false)
-                }
+            VStack(spacing: 0) {
+                hero
 
-                uploadCard
+                MarqueeTape()
+                    .rotationEffect(.degrees(-1.2))
+                    .scaleEffect(x: 1.05)
+                    .padding(.top, 22)
+                    .zIndex(2)
 
-                HStack {
-                    Text("Workspace Projects (\(vm.projects.count))")
-                        .font(.clipz(16, .bold)).foregroundStyle(Theme.textWhite)
-                    Spacer()
-                    Button { vm.loadProjects() } label: {
-                        Text("Refresh").font(.clipz(12.5, .semibold)).foregroundStyle(Theme.coral)
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                if vm.projects.isEmpty {
-                    Card(radius: 16) {
-                        VStack(spacing: 6) {
-                            Text("No projects found").font(.clipz(15, .bold)).foregroundStyle(Theme.textWhite)
-                            Text("Upload a video above or tap Refresh to load your projects from the server.")
-                                .font(.clipz(12.5)).foregroundStyle(Theme.textMuted).multilineTextAlignment(.center)
-                        }
-                        .padding(24).frame(maxWidth: .infinity)
-                    }
-                } else {
-                    ForEach(vm.projects) { proj in
-                        Button { vm.openProjectInStudio(proj) } label: { projectRow(proj) }
-                            .buttonStyle(.plain)
-                    }
-                }
+                reelsSection
+                    .padding(.top, 28)
             }
-            .padding(.horizontal, 16).padding(.vertical, 18)
         }
+        .background(Theme.ink)
         .scrollDismissesKeyboard(.interactively)
         .refreshable { vm.loadProjects() }
         .onChange(of: pickerItem) { _, item in
@@ -242,38 +257,76 @@ struct ReelsHomeScreen: View {
         }
     }
 
-    private var uploadCard: some View {
-        VStack(spacing: 14) {
-            ZStack {
-                Circle().fill(Theme.coral.opacity(0.15))
-                Circle().stroke(Theme.coral.opacity(0.4), lineWidth: 1)
-                VectorIcon(kind: .upload, size: 24, color: Theme.coral)
-            }
-            .frame(width: 54, height: 54)
+    // MARK: Hero + upload card
 
-            VStack(spacing: 4) {
-                Text("Upload a New Reel").font(.clipz(20, .heavy)).foregroundStyle(Theme.textWhite)
-                Text("Upload a raw video (max 90s) to the ClipZ server for transcript, beat analysis, and AI editing.")
-                    .font(.clipz(13)).foregroundStyle(Theme.textMuted).multilineTextAlignment(.center)
+    private var hero: some View {
+        ZStack(alignment: .topLeading) {
+            Theme.cobalt
+            DotPattern()
+            VStack(alignment: .leading, spacing: 18) {
+                Text("AGENTIC REEL EDITOR · 9:16 · UP TO 90 S")
+                    .font(.mono(10.5, .bold)).tracking(1.4).foregroundStyle(.white.opacity(0.85))
+
+                VStack(alignment: .leading, spacing: -2) {
+                    HStack(spacing: 10) {
+                        Text("You").foregroundStyle(Theme.yellow)
+                        Text("talk.").foregroundStyle(Theme.white)
+                    }
+                    Text("It cuts.").foregroundStyle(Theme.white)
+                }
+                .font(.display(50, .black)).tracking(-1.5)
+                .lineLimit(1).minimumScaleFactor(0.6)
+
+                Text("Upload a raw vertical video and say what you want in plain words. ClipZ cuts the dead air, adds captions, memes and music, then renders your reel.")
+                    .font(.ui(15.5)).foregroundStyle(.white.opacity(0.92)).lineSpacing(3)
+
+                uploadCard
+                    .padding(.top, 6)
+            }
+            .padding(.horizontal, 20).padding(.top, 24).padding(.bottom, 34)
+        }
+    }
+
+    private var uploadCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle().fill(Theme.cobalt)
+                    VectorIcon(kind: .upload, size: 20, color: Theme.yellow)
+                }
+                .frame(width: 44, height: 44)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("New reel").font(.display(18, .bold)).foregroundStyle(Theme.ink)
+                    Text("We analyse it as soon as it lands.")
+                        .font(.ui(13)).foregroundStyle(Theme.ink.opacity(0.65))
+                }
             }
 
             StyledCapsuleInput(
                 text: Binding(get: { vm.newReelName }, set: { if $0.count <= 120 { vm.newReelName = $0 } }),
-                placeholder: "New reel name (optional)", accent: Theme.coral, singleLine: true)
+                placeholder: "Reel name (optional)", singleLine: true, light: true)
 
-            Button { showSourceChoice = true } label: {
-                HStack(spacing: 8) {
-                    VectorIcon(kind: .upload, size: 18, color: Theme.ink)
+            Button {
+                Haptics.tap()
+                showSourceChoice = true
+            } label: {
+                HStack(spacing: 10) {
+                    if vm.busy && vm.uploadProgress == nil {
+                        ProgressView().tint(Theme.ink)
+                    } else {
+                        VectorIcon(kind: .upload, size: 18, color: Theme.ink)
+                    }
                     Text(vm.uploadProgress != nil
                          ? (vm.uploadStatusText.isEmpty ? "Uploading…" : vm.uploadStatusText)
-                         : "Select Video & Upload")
-                        .font(.clipz(14.5, .heavy)).foregroundStyle(Theme.ink)
+                         : "Select video & upload")
+                        .font(.display(14, .bold)).lineLimit(1).minimumScaleFactor(0.7)
                 }
-                .frame(maxWidth: .infinity).frame(height: 50)
-                .background(vm.busy ? Theme.disabledGradient : Theme.accentGradient, in: RoundedRectangle(cornerRadius: 14))
+                .frame(maxWidth: .infinity).frame(height: 54)
+                .opacity(vm.busy ? 0.6 : 1)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(BrutalButtonStyle(fill: Theme.yellow, shadow: Theme.ink, stroke: Theme.ink))
             .disabled(vm.busy)
+            .padding(.trailing, 4).padding(.bottom, 4)
             .confirmationDialog("Choose video source", isPresented: $showSourceChoice, titleVisibility: .visible) {
                 Button("Files (Downloads, iCloud…)") { showFileImporter = true }
                 Button("Photo Library") { showPhotoPicker = true }
@@ -300,65 +353,109 @@ struct ReelsHomeScreen: View {
             }
 
             if let p = vm.uploadProgress {
-                ProgressView(value: p).tint(Theme.coral)
-                    .scaleEffect(x: 1, y: 1.5)
-                    .background(Theme.border, in: Capsule())
+                VStack(alignment: .leading, spacing: 6) {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Theme.lineLight)
+                            Capsule().fill(Theme.cobalt).frame(width: max(8, geo.size.width * p))
+                        }
+                    }
+                    .frame(height: 8)
+                    Text("Keep the app open while uploading").font(.mono(11)).foregroundStyle(Theme.ink.opacity(0.55))
+                }
+                .animation(.easeOut(duration: 0.2), value: p)
             }
         }
         .padding(20)
-        .background(Theme.heroGradient, in: RoundedRectangle(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Theme.coral.opacity(0.55), lineWidth: 1.5))
+        .background(Theme.paper, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Theme.ink, lineWidth: 2))
+        .hardShadow(Theme.ink, offset: 6, radius: 26)
     }
 
-    private func projectRow(_ proj: Project) -> some View {
-        Card(radius: 16) {
-            HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12).fill(Theme.surface2)
-                    RoundedRectangle(cornerRadius: 12).stroke(Theme.border)
-                    VectorIcon(kind: .play, size: 16, color: Theme.coral)
-                }
-                .frame(width: 44, height: 44)
+    // MARK: Reels list
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(proj.name).font(.clipz(15, .bold)).foregroundStyle(Theme.textWhite).lineLimit(1)
+    private var reelsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .bottom) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Eyebrow(text: "Workspace", color: Theme.yellow)
+                    HStack(spacing: 10) {
+                        Text("Your reels").font(.display(26, .black)).tracking(-0.8).foregroundStyle(Theme.paper)
+                        Text("\(vm.projects.count)").font(.mono(13, .bold)).foregroundStyle(Theme.ink)
+                            .padding(.horizontal, 9).padding(.vertical, 3).background(Theme.yellow, in: Capsule())
+                    }
+                }
+                Spacer()
+                Button { Haptics.tap(); vm.loadProjects() } label: {
+                    Text("Refresh ↻").font(.mono(12, .bold)).foregroundStyle(Theme.yellow)
+                        .padding(.horizontal, 6).frame(height: 36).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+
+            if vm.projects.isEmpty {
+                emptyState
+            } else {
+                ForEach(vm.projects) { proj in
+                    Button { Haptics.tap(); vm.openProjectInStudio(proj) } label: { ProjectRow(project: proj) }
+                        .buttonStyle(PressableStyle())
+                }
+            }
+        }
+        .padding(.horizontal, 20).padding(.bottom, 40)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.cobalt)
+                VectorIcon(kind: .play, size: 22, color: Theme.yellow)
+            }
+            .frame(width: 56, height: 56)
+            Text(vm.serverHealthy == false ? "Can't reach the server" : "No reels yet")
+                .font(.display(16, .bold)).foregroundStyle(Theme.paper)
+            Text(vm.serverHealthy == false
+                 ? "Check the API URL in settings (gear icon), then pull down to refresh."
+                 : "Upload your first video above. It shows up here once the server has it.")
+                .font(.ui(14)).foregroundStyle(Theme.muted).multilineTextAlignment(.center)
+        }
+        .padding(28).frame(maxWidth: .infinity)
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .stroke(Theme.line, style: StrokeStyle(lineWidth: 2, dash: [6, 6])))
+    }
+}
+
+struct ProjectRow: View {
+    let project: Project
+
+    var body: some View {
+        Card(radius: 22) {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.cobalt)
+                    VectorIcon(kind: .play, size: 18, color: Theme.yellow)
+                }
+                .frame(width: 52, height: 52)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(project.name).font(.ui(17, .bold)).foregroundStyle(Theme.paper).lineLimit(1)
                     HStack(spacing: 8) {
-                        StatusPill(status: proj.status)
-                        Text(formatTimestamp(proj.createdAt)).font(.clipz(11)).foregroundStyle(Theme.textMuted)
+                        StatusPill(status: project.status)
+                        Text(formatTimestamp(project.createdAt)).font(.mono(10.5)).foregroundStyle(Theme.muted).lineLimit(1)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                Text("Open →").font(.clipz(12, .bold)).foregroundStyle(Theme.coral)
-                    .padding(.horizontal, 12).padding(.vertical, 7)
-                    .background(Theme.surface2, in: RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.coral.opacity(0.4)))
+                Text("→").font(.display(18, .bold)).foregroundStyle(Theme.yellow)
             }
             .padding(14)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Opens this reel in the studio")
     }
 }
 
-struct StepPill: View {
-    let num: String
-    let label: String
-    let active: Bool
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Text(num).font(.clipz(10, .heavy)).foregroundStyle(active ? .black : Theme.textMuted)
-                .frame(width: 18, height: 18)
-                .background(active ? Theme.coral : Theme.surface3, in: Circle())
-            Text(label).font(.clipz(11, .semibold)).foregroundStyle(active ? Theme.textWhite : Theme.textMuted).lineLimit(1)
-        }
-        .padding(.horizontal, 8).padding(.vertical, 7)
-        .frame(maxWidth: .infinity)
-        .background(active ? Theme.coral.opacity(0.14) : Theme.surface1, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(active ? Theme.coral.opacity(0.5) : Theme.border))
-    }
-}
-
-// MARK: - Modals
+// MARK: - Modals (paper cards, like the site's light sections)
 
 struct DialogOverlay<Content: View>: View {
     let onDismiss: () -> Void
@@ -366,16 +463,16 @@ struct DialogOverlay<Content: View>: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.6).ignoresSafeArea().onTapGesture(perform: onDismiss)
+            Color.black.opacity(0.65).ignoresSafeArea().onTapGesture(perform: onDismiss)
             ScrollView {
                 content()
-                    .padding(24)
-                    .background(Theme.surface1, in: RoundedRectangle(cornerRadius: 24))
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 40)
+                    .padding(22)
+                    .background(Theme.paper, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).stroke(Theme.ink, lineWidth: 2))
+                    .hardShadow(Theme.cobalt, offset: 6, radius: 28)
+                    .padding(.horizontal, 22).padding(.vertical, 44)
             }
             .scrollBounceBehavior(.basedOnSize)
-            .frame(maxHeight: .infinity)
         }
         .transition(.opacity)
     }
@@ -401,41 +498,56 @@ struct WorkspaceDialog: View {
 
     var body: some View {
         DialogOverlay(onDismiss: onDismiss) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Workspace & API Server").font(.clipz(17, .bold)).foregroundStyle(Theme.textWhite)
-                Text("Connected to your live ClipZ server. Keep 'reelforge-dev-key' to see your existing projects, or type any new name for a fresh workspace.")
-                    .font(.clipz(12)).foregroundStyle(Theme.textMuted)
-                StyledCapsuleInput(text: $newKey, placeholder: "Workspace Key", accent: Theme.coral, singleLine: true)
-                StyledCapsuleInput(text: $newUrl, placeholder: "API Base URL", accent: Theme.coral, singleLine: true)
+            VStack(alignment: .leading, spacing: 12) {
+                Eyebrow(text: "Connection", color: Theme.cobalt)
+                Text("Workspace & API").font(.display(22, .black)).tracking(-0.5).foregroundStyle(Theme.ink)
+                Text("Keep 'reelforge-dev-key' to see your existing projects, or type any new name for a fresh workspace.")
+                    .font(.ui(14)).foregroundStyle(Theme.ink.opacity(0.7))
+
+                labelled("WORKSPACE KEY") { StyledCapsuleInput(text: $newKey, placeholder: "Workspace Key", singleLine: true, light: true) }
+                labelled("API BASE URL") { StyledCapsuleInput(text: $newUrl, placeholder: "API Base URL", singleLine: true, light: true) }
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        suggestion("ngrok Live Server") { newUrl = ClipzConfig.baseURL }
-                        suggestion("reelforge-dev-key") { newKey = ClipzConfig.workspaceKey }
+                        suggestion("Use default server") { newUrl = ClipzConfig.baseURL }
+                        suggestion("Default key") { newKey = ClipzConfig.workspaceKey }
                     }
                 }
 
-                HStack(spacing: 8) {
+                HStack(spacing: 10) {
                     Spacer()
                     Button(action: onDismiss) {
-                        Text("Cancel").font(.clipz(14, .medium)).foregroundStyle(Theme.textMuted).padding(.horizontal, 12).padding(.vertical, 9)
+                        Text("Cancel").font(.ui(15, .bold)).foregroundStyle(Theme.ink.opacity(0.7))
+                            .padding(.horizontal, 14).frame(height: 46).contentShape(Rectangle())
                     }.buttonStyle(.plain)
-                    Button { onSave(newKey, newUrl) } label: {
-                        Text("Save & Connect").font(.clipz(14, .bold)).foregroundStyle(.black)
-                            .padding(.horizontal, 18).padding(.vertical, 10)
-                            .background(Theme.coral, in: Capsule())
-                    }.buttonStyle(.plain)
+                    Button { Haptics.tap(); onSave(newKey, newUrl) } label: {
+                        Text("Save & connect").font(.display(13, .bold)).foregroundStyle(Theme.ink)
+                            .padding(.horizontal, 20).frame(height: 46)
+                    }
+                    .buttonStyle(BrutalButtonStyle(fill: Theme.yellow, shadow: Theme.ink, stroke: Theme.ink))
+                    .padding([.trailing, .bottom], 4)
                 }
-                .padding(.top, 6)
+                .padding(.top, 4)
             }
         }
     }
 
+    private func labelled<V: View>(_ label: String, @ViewBuilder _ field: () -> V) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label).font(.mono(10.5, .bold)).tracking(1.2).foregroundStyle(Theme.ink.opacity(0.55))
+            field()
+        }
+    }
+
     private func suggestion(_ label: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(label).font(.clipz(11)).foregroundStyle(Theme.textWhite)
-                .padding(.horizontal, 12).padding(.vertical, 7)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border))
+        Button {
+            Haptics.select()
+            action()
+        } label: {
+            Text(label).font(.ui(13, .bold)).foregroundStyle(Theme.ink)
+                .padding(.horizontal, 14).frame(height: 38)
+                .overlay(Capsule().stroke(Theme.ink, lineWidth: 1.5))
+                .contentShape(Capsule())
         }.buttonStyle(.plain)
     }
 }
@@ -445,21 +557,23 @@ struct QuickHowToModal: View {
 
     var body: some View {
         DialogOverlay(onDismiss: onDismiss) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("How to Use ClipZ Studio (3 Easy Steps)").font(.clipz(16, .bold)).foregroundStyle(Theme.textWhite)
-                HowToStep(num: "Step 1", title: "Open a Project or Upload a Video",
-                          text: "Tap an existing project (like 'Test') or tap 'Select Video & Upload' to send a new video to your ClipZ server.")
-                HowToStep(num: "Step 2", title: "Brainstorm, '✦ My style', or Edit",
-                          text: "• ✻ Brainstorm: Discuss the edit first without modifying the timeline.\n• ✦ My style: Drafts a prompt learned from how you edited your other reels.\n• ● Edit: Streams real-time Director tool calls and renders a video preview on the server.")
-                HowToStep(num: "Step 3", title: "Subtitles, Timeline & Save MP4",
-                          text: "• Subtitles: Tap any word (w1, w64, w138…) to insert its ID into your prompt.\n• Timeline: Undo, Redo, or Export final video.\n• Save MP4: Saves the rendered MP4 to your Photos library.")
+            VStack(alignment: .leading, spacing: 14) {
+                Eyebrow(text: "Quick guide", color: Theme.cobalt)
+                Text("You talk.\nIt cuts.").font(.display(26, .black)).tracking(-0.8).foregroundStyle(Theme.ink)
+                HowToStep(num: "01", title: "Pick a reel",
+                          text: "Open a reel from your list, or upload a new video from Files or Photos.")
+                HowToStep(num: "02", title: "Brainstorm, My style or Edit",
+                          text: "✻ Brainstorm talks the edit through without touching the timeline.\n✦ My style drafts a prompt from your past reels.\n● Edit streams the Director's tool calls and renders a preview.")
+                HowToStep(num: "03", title: "Fine-tune and save",
+                          text: "Subtitles: tap any word to drop its ID into your prompt.\nTimeline: undo, redo or export.\nSave MP4: puts the render in your Photos library.")
                 HStack {
                     Spacer()
-                    Button(action: onDismiss) {
-                        Text("Got It").font(.clipz(14, .bold)).foregroundStyle(.black)
-                            .padding(.horizontal, 22).padding(.vertical, 10)
-                            .background(Theme.coral, in: Capsule())
-                    }.buttonStyle(.plain)
+                    Button { Haptics.tap(); onDismiss() } label: {
+                        Text("Got it").font(.display(13, .bold)).foregroundStyle(Theme.ink)
+                            .padding(.horizontal, 24).frame(height: 46)
+                    }
+                    .buttonStyle(BrutalButtonStyle(fill: Theme.yellow, shadow: Theme.ink, stroke: Theme.ink))
+                    .padding([.trailing, .bottom], 4)
                 }
             }
         }
@@ -472,12 +586,12 @@ struct HowToStep: View {
     let text: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("\(num) — \(title)").font(.clipz(12.5, .bold)).foregroundStyle(Theme.coral)
-            Text(text).font(.clipz(12)).foregroundStyle(Theme.textWhite).lineSpacing(3)
+        VStack(alignment: .leading, spacing: 6) {
+            Rectangle().fill(Theme.ink).frame(height: 3)
+            Text(num).font(.mono(12, .bold)).foregroundStyle(Theme.cobalt)
+            Text(title).font(.display(15, .bold)).foregroundStyle(Theme.ink)
+            Text(text).font(.ui(14)).foregroundStyle(Theme.ink.opacity(0.75)).lineSpacing(3)
         }
-        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.surface2, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.border))
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

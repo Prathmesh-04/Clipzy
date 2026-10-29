@@ -9,23 +9,23 @@ struct UnifiedStudioScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Hidden while the keyboard is up, as on Android.
+            // Hidden while the keyboard is up so the prompt box gets the room.
             if !isKeyboardOpen {
                 StudioVideoStage(vm: vm)
             }
 
-            HStack(spacing: 8) {
-                WorkspaceTabButton(title: "AI Director", badge: nil, selected: vm.studioTab == "director") { vm.studioTab = "director" }
+            HStack(spacing: 6) {
+                WorkspaceTabButton(title: "Director", badge: nil, selected: vm.studioTab == "director") { vm.studioTab = "director" }
                 WorkspaceTabButton(title: "Subtitles", badge: vm.words.isEmpty ? nil : "\(vm.words.count)",
                                    selected: vm.studioTab == "transcript") { vm.studioTab = "transcript" }
                 WorkspaceTabButton(title: "Timeline", badge: "v\(vm.timelineVersion)",
                                    selected: vm.studioTab == "timeline") { vm.studioTab = "timeline" }
             }
-            .padding(.horizontal, 12).padding(.vertical, 6)
-            .frame(maxWidth: .infinity)
-            .background(Theme.surface1)
-            .overlay(alignment: .top) { Rectangle().fill(Theme.border).frame(height: 1) }
-            .overlay(alignment: .bottom) { Rectangle().fill(Theme.border).frame(height: 1) }
+            .padding(6)
+            .background(Theme.ink2, in: Capsule())
+            .overlay(Capsule().stroke(Theme.line, lineWidth: 1.5))
+            .padding(.horizontal, 16).padding(.vertical, 10)
+            .animation(.spring(response: 0.3, dampingFraction: 0.85), value: vm.studioTab)
 
             Group {
                 switch vm.studioTab {
@@ -36,7 +36,7 @@ struct UnifiedStudioScreen: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(Theme.bgDeep)
+        .background(Theme.ink)
     }
 }
 
@@ -47,21 +47,25 @@ struct WorkspaceTabButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                Text(title).font(.clipz(12, selected ? .bold : .medium)).foregroundStyle(selected ? Theme.textWhite : Theme.textMuted)
+        Button {
+            Haptics.select()
+            action()
+        } label: {
+            HStack(spacing: 6) {
+                Text(title).font(.display(11.5, selected ? .bold : .medium))
+                    .foregroundStyle(selected ? Theme.ink : Theme.muted)
                 if let badge {
-                    Text(badge).font(.clipz(9.5, .heavy)).foregroundStyle(selected ? .black : Theme.textMuted)
-                        .padding(.horizontal, 5).padding(.vertical, 1)
-                        .background(selected ? Theme.coral : Theme.surface2, in: Capsule())
+                    Text(badge).font(.mono(10, .bold)).foregroundStyle(selected ? Theme.yellow : Theme.muted)
+                        .padding(.horizontal, 6).padding(.vertical, 1)
+                        .background(selected ? Theme.ink : Theme.ink3, in: Capsule())
                 }
             }
-            .padding(.vertical, 7).padding(.horizontal, 6)
-            .frame(maxWidth: .infinity)
-            .background(selected ? Theme.surface3 : .clear, in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(selected ? Theme.coral.opacity(0.6) : .clear))
+            .frame(maxWidth: .infinity).frame(height: 38)
+            .background(selected ? Theme.yellow : .clear, in: Capsule())
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -109,76 +113,98 @@ struct StudioVideoStage: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                StageChip(label: vm.renders.isEmpty ? "Results" : "Rendered (\(vm.renders[0].profile))",
+                StageChip(label: vm.renders.isEmpty ? "Result" : "Render · \(vm.renders[0].profile)",
                           selected: vm.videoSourceMode == "render") { vm.videoSourceMode = "render" }
                 StageChip(label: "Original", selected: vm.videoSourceMode == "original") {
                     vm.videoSourceMode = "original"
                     vm.loadOriginalVideo()
                 }
-                Spacer()
+                Spacer(minLength: 4)
 
                 if let f = activeFile, FileManager.default.fileExists(atPath: f.path) {
-                    Button { vm.saveCurrentVideoToPhotos() } label: {
-                        HStack(spacing: 4) {
-                            VectorIcon(kind: .download, size: 12, color: Theme.coral)
-                            Text("Save MP4").font(.clipz(11, .bold)).foregroundStyle(Theme.coral)
+                    Button {
+                        Haptics.tap()
+                        vm.saveCurrentVideoToPhotos()
+                    } label: {
+                        HStack(spacing: 6) {
+                            VectorIcon(kind: .download, size: 13, color: Theme.ink)
+                            Text("Save MP4").font(.display(10.5, .bold)).foregroundStyle(Theme.ink)
                         }
-                        .padding(.horizontal, 9).padding(.vertical, 5)
-                        .background(Theme.surface2, in: RoundedRectangle(cornerRadius: 8))
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.coral.opacity(0.4)))
-                    }.buttonStyle(.plain)
+                        .padding(.horizontal, 12).frame(height: 34)
+                    }
+                    .buttonStyle(BrutalButtonStyle(fill: Theme.yellow, shadow: Theme.cobalt, offset: 3))
+                    .accessibilityLabel("Save MP4 to Photos")
                 }
 
-                Button { vm.videoExpanded.toggle() } label: {
-                    Text(vm.videoExpanded ? "Hide ▲" : "Video ▼").font(.clipz(11, .medium)).foregroundStyle(Theme.textMuted)
-                        .padding(.horizontal, 9).padding(.vertical, 5)
-                        .background(Theme.surface2, in: RoundedRectangle(cornerRadius: 8))
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border))
-                }.buttonStyle(.plain)
+                Button { Haptics.select(); withAnimation(.easeInOut(duration: 0.2)) { vm.videoExpanded.toggle() } } label: {
+                    Text(vm.videoExpanded ? "Hide" : "Video").font(.mono(11, .bold)).foregroundStyle(Theme.muted)
+                        .padding(.horizontal, 10).frame(height: 34)
+                        .overlay(Capsule().stroke(Theme.line, lineWidth: 1.5))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
             }
-            .padding(.horizontal, 12).padding(.vertical, 7)
+            .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, vm.videoExpanded ? 6 : 10)
 
             if vm.videoExpanded {
                 ZStack {
                     Color.black
                     stageContent
                     if let rp = vm.renderProgress {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Server rendering preview… \(Int(rp * 100))%")
-                                .font(.clipz(11, .bold)).foregroundStyle(Theme.coral)
-                            ProgressView(value: max(rp, 0.05)).tint(Theme.coral)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("RENDERING PREVIEW · \(Int(rp * 100))%")
+                                .font(.mono(10.5, .bold)).tracking(1).foregroundStyle(Theme.yellow)
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    Capsule().fill(.white.opacity(0.18))
+                                    Capsule().fill(Theme.yellow).frame(width: max(6, geo.size.width * max(rp, 0.05)))
+                                }
+                            }
+                            .frame(height: 5)
                         }
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(Color(hex: 0xE6090A0F))
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                        .background(Theme.ink.opacity(0.92))
                         .frame(maxHeight: .infinity, alignment: .bottom)
                     }
                 }
-                .frame(height: 210)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.border))
-                .padding(.horizontal, 12).padding(.top, 4).padding(.bottom, 8)
+                .frame(height: 220)
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Theme.line, lineWidth: 2))
+                .hardShadow(Theme.cobalt, offset: 5, radius: 24)
+                .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 10)
+                .transition(.opacity)
             }
         }
-        .background(Theme.surface1)
-        .overlay(alignment: .bottom) { Rectangle().fill(Theme.border).frame(height: 1) }
+        .background(Theme.ink)
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
     }
 
     @ViewBuilder private var stageContent: some View {
         if vm.videoLoading {
-            VStack(spacing: 8) {
-                ProgressView().tint(Theme.coral)
-                Text("Streaming video from server…").font(.clipz(12)).foregroundStyle(Theme.textMuted)
+            VStack(spacing: 10) {
+                ProgressView().tint(Theme.yellow)
+                Text("Loading video…").font(.mono(12)).foregroundStyle(Theme.muted)
             }
         } else if let err = vm.videoError {
-            Text(err).font(.clipz(12)).foregroundStyle(Theme.red).multilineTextAlignment(.center).padding(16)
+            VStack(spacing: 10) {
+                Text(err).font(.ui(13)).foregroundStyle(Theme.red).multilineTextAlignment(.center)
+                GhostButton(title: "Try again") {
+                    if vm.videoSourceMode == "render", let u = vm.playingRenderUrl { vm.playRenderVideo(u) } else { vm.loadOriginalVideo() }
+                }
+            }.padding(16)
         } else if let f = activeFile, FileManager.default.fileExists(atPath: f.path) {
             LoopingVideoView(holder: vm.loopingPlayer(for: f))
         } else {
-            VStack(spacing: 4) {
-                Text(vm.videoSourceMode == "render" ? "No render yet" : "Tap Original to load source")
-                    .font(.clipz(13, .semibold)).foregroundStyle(Theme.textWhite)
-                Text("Send an edit prompt below or switch to 'Original' to watch the uploaded video.")
-                    .font(.clipz(11.5)).foregroundStyle(Theme.textMuted).multilineTextAlignment(.center)
+            VStack(spacing: 6) {
+                ZStack {
+                    Circle().fill(Theme.cobalt)
+                    VectorIcon(kind: .play, size: 18, color: Theme.yellow)
+                }
+                .frame(width: 44, height: 44)
+                Text(vm.videoSourceMode == "render" ? "No render yet" : "Tap Original to load the source")
+                    .font(.display(13, .bold)).foregroundStyle(Theme.paper)
+                Text("Tell the Director what to do and the preview lands here.")
+                    .font(.ui(12.5)).foregroundStyle(Theme.muted).multilineTextAlignment(.center)
             }.padding(16)
         }
     }
@@ -190,11 +216,15 @@ struct StageChip: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            Text(label).font(.clipz(11, selected ? .bold : .medium)).foregroundStyle(selected ? Theme.textWhite : Theme.textMuted)
-                .padding(.horizontal, 10).padding(.vertical, 5)
-                .background(selected ? Theme.coral.opacity(0.18) : Theme.surface2, in: RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? Theme.coral : Theme.border))
+        Button {
+            Haptics.select()
+            action()
+        } label: {
+            Text(label).font(.mono(11, .bold)).foregroundStyle(selected ? Theme.ink : Theme.muted)
+                .padding(.horizontal, 12).frame(height: 34)
+                .background(selected ? Theme.paper : .clear, in: Capsule())
+                .overlay(Capsule().stroke(selected ? Theme.paper : Theme.line, lineWidth: 1.5))
+                .contentShape(Capsule())
         }.buttonStyle(.plain)
     }
 }
@@ -206,11 +236,22 @@ struct StudioDirectorSection: View {
     let isKeyboardOpen: Bool
     @FocusState private var composerFocused: Bool
 
+    private var editSuggestions: [(String, String)] {
+        [("Remove pauses", "Remove pauses and dead air."),
+         ("Viral captions", "Add viral word-by-word captions."),
+         ("Upbeat music", "Add upbeat background music, ducked under my voice."),
+         ("Logos + whoosh", "Add logos when tools or brands are named, plus whoosh SFX."),
+         ("Export", "export the final video")]
+    }
+    private let brainSuggestions = [("Best hook?", "What's the best hook for this reel?"),
+                                    ("Pacing ideas", "How should I pace this reel?"),
+                                    ("Caption style", "What caption style would suit this reel?")]
+
     var body: some View {
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: 10) {
+                    LazyVStack(spacing: 12) {
                         if vm.feed.isEmpty {
                             QuickStartRecipesCard(
                                 onMyStyle: { vm.requestMyStyle() },
@@ -223,11 +264,22 @@ struct StudioDirectorSection: View {
                         ForEach(vm.feed) { item in
                             feedRow(item).id(item.id)
                         }
+                        if vm.busy && !vm.styleLoading {
+                            HStack(spacing: 10) {
+                                TypingDots()
+                                Text(vm.mode == "brainstorm" ? "Thinking…" : "Director is working…")
+                                    .font(.mono(12)).foregroundStyle(Theme.muted)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 4)
+                            .id("typing")
+                        }
                     }
-                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .padding(.horizontal, 16).padding(.vertical, 8)
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .onChange(of: vm.feed.count) { scrollToEnd(proxy) }
+                .onChange(of: vm.busy) { scrollToEnd(proxy) }
                 .onChange(of: isKeyboardOpen) { scrollToEnd(proxy) }
             }
 
@@ -236,8 +288,10 @@ struct StudioDirectorSection: View {
     }
 
     private func scrollToEnd(_ proxy: ScrollViewProxy) {
-        guard let last = vm.feed.last else { return }
-        withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+        withAnimation(.easeOut(duration: 0.25)) {
+            if vm.busy && !vm.styleLoading { proxy.scrollTo("typing", anchor: .bottom) }
+            else if let last = vm.feed.last { proxy.scrollTo(last.id, anchor: .bottom) }
+        }
     }
 
     @ViewBuilder private func feedRow(_ item: FeedItem) -> some View {
@@ -247,7 +301,7 @@ struct StudioDirectorSection: View {
         case .finalPrompt(_, let prompt):
             FinalPromptCardUI(prompt: prompt, busy: vm.busy,
                               onSend: { vm.mode = "edit"; vm.runEdit(prompt) },
-                              onEditFirst: { vm.mode = "edit"; vm.composerInput = prompt })
+                              onEditFirst: { vm.mode = "edit"; vm.composerInput = prompt; composerFocused = true })
         case .style(let id, let note, let prompt, let habits, let submitted):
             StyleCardUI(cardId: id, note: note, prompt: prompt, habits: habits, submitted: submitted, busy: vm.busy,
                         onSend: { p in
@@ -270,39 +324,66 @@ struct StudioDirectorSection: View {
     }
 
     private var composer: some View {
-        let accent = vm.mode == "brainstorm" ? Theme.blue : Theme.coral
+        let accent = vm.mode == "brainstorm" ? Theme.periwinkle : Theme.yellow
         let canSend = !vm.busy && !vm.composerInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let send = {
             guard canSend else { return }
+            Haptics.tap()
             let text = vm.composerInput
             composerFocused = false
             vm.sendText(text)
         }
-        return VStack(spacing: 8) {
+        let suggestions = vm.mode == "brainstorm" ? brainSuggestions : editSuggestions
+
+        return VStack(spacing: 10) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ComposerModeChip(label: "✻ Brainstorm", active: vm.mode == "brainstorm", brush: Theme.brainstormGradient) { vm.mode = "brainstorm" }
-                    ComposerModeChip(label: "● Edit", active: vm.mode == "edit", brush: Theme.accentGradient) { vm.mode = "edit" }
-                    Button { vm.requestMyStyle() } label: {
+                    ComposerModeChip(label: "✻ Brainstorm", active: vm.mode == "brainstorm", fill: Theme.periwinkle) { vm.mode = "brainstorm" }
+                    ComposerModeChip(label: "● Edit", active: vm.mode == "edit", fill: Theme.yellow) { vm.mode = "edit" }
+                    Button {
+                        Haptics.tap()
+                        vm.requestMyStyle()
+                    } label: {
                         Text(vm.styleLoading ? "✦ Learning…" : "✦ My style")
-                            .font(.clipz(12, .heavy)).foregroundStyle(.white)
-                            .padding(.horizontal, 13).padding(.vertical, 6)
-                            .background(Theme.styleGradient, in: Capsule())
+                            .font(.ui(13.5, .bold)).foregroundStyle(Theme.ink)
+                            .padding(.horizontal, 14).frame(height: 36)
+                            .background(Theme.paper, in: Capsule())
+                            .opacity(vm.busy || vm.styleLoading ? 0.5 : 1)
+                            .contentShape(Capsule())
                     }
                     .buttonStyle(.plain).disabled(vm.busy || vm.styleLoading)
 
                     if isKeyboardOpen {
                         Button { composerFocused = false } label: {
-                            Text("Done ▾").font(.clipz(11, .semibold)).foregroundStyle(Theme.textMuted)
-                                .padding(.horizontal, 10).padding(.vertical, 5)
-                                .background(Theme.surface2, in: Capsule())
-                                .overlay(Capsule().stroke(Theme.border))
+                            Text("Done ▾").font(.mono(11.5, .bold)).foregroundStyle(Theme.muted)
+                                .padding(.horizontal, 12).frame(height: 36)
+                                .overlay(Capsule().stroke(Theme.line, lineWidth: 1.5))
+                                .contentShape(Capsule())
                         }.buttonStyle(.plain)
                     }
                 }
             }
 
-            HStack(spacing: 8) {
+            if vm.composerInput.isEmpty && !vm.busy {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(suggestions, id: \.0) { chip in
+                            Button {
+                                Haptics.select()
+                                vm.composerInput = chip.1
+                            } label: {
+                                Text(chip.0).font(.ui(13, .medium)).foregroundStyle(Theme.paper.opacity(0.9))
+                                    .padding(.horizontal, 12).frame(height: 32)
+                                    .overlay(Capsule().stroke(Theme.line, lineWidth: 1.5))
+                                    .contentShape(Capsule())
+                            }.buttonStyle(.plain)
+                        }
+                    }
+                }
+                .transition(.opacity)
+            }
+
+            HStack(alignment: .bottom, spacing: 10) {
                 StyledCapsuleInput(
                     text: $vm.composerInput,
                     placeholder: vm.mode == "brainstorm" ? "What should this reel feel like?" : "Tell the Director what to do…",
@@ -310,38 +391,46 @@ struct StudioDirectorSection: View {
 
                 Button(action: send) {
                     ZStack {
-                        Circle().fill(!canSend ? Theme.disabledGradient : (vm.mode == "brainstorm" ? Theme.brainstormGradient : Theme.accentGradient))
                         if vm.busy {
-                            ProgressView().tint(Theme.textWhite).scaleEffect(0.8)
+                            ProgressView().tint(Theme.muted)
                         } else {
-                            VectorIcon(kind: .send, size: 18, color: canSend ? Theme.ink : Theme.textMuted)
+                            VectorIcon(kind: .send, size: 20, color: canSend ? Theme.ink : Theme.muted)
                         }
                     }
-                    .frame(width: 46, height: 46)
+                    .frame(width: 50, height: 50)
                 }
-                .buttonStyle(.plain).disabled(!canSend)
+                .buttonStyle(BrutalButtonStyle(fill: canSend ? accent : Theme.ink3,
+                                               shadow: canSend ? Theme.cobalt : .clear, offset: 3))
+                .disabled(!canSend)
+                .padding([.trailing, .bottom], 3)
+                .accessibilityLabel("Send")
             }
         }
-        .padding(.horizontal, 12).padding(.vertical, 10)
-        .background(Theme.surface1)
-        .overlay(alignment: .top) { Rectangle().fill(Theme.border).frame(height: 1) }
+        .padding(.horizontal, 14).padding(.top, 10).padding(.bottom, 10)
+        .background(Theme.ink2)
+        .overlay(alignment: .top) { Rectangle().fill(Theme.line).frame(height: 1.5) }
+        .animation(.easeOut(duration: 0.2), value: vm.composerInput.isEmpty)
     }
 }
 
 struct ComposerModeChip: View {
     let label: String
     let active: Bool
-    let brush: LinearGradient
+    let fill: Color
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            Text(label).font(.clipz(12, active ? .heavy : .semibold)).foregroundStyle(active ? Theme.ink : Theme.textMuted)
-                .padding(.horizontal, 13).padding(.vertical, 6)
-                .background {
-                    if active { Capsule().fill(brush) } else { Capsule().fill(Theme.surface2).overlay(Capsule().stroke(Theme.border)) }
-                }
+        Button {
+            Haptics.select()
+            action()
+        } label: {
+            Text(label).font(.ui(13.5, .bold)).foregroundStyle(active ? Theme.ink : Theme.muted)
+                .padding(.horizontal, 14).frame(height: 36)
+                .background(active ? fill : .clear, in: Capsule())
+                .overlay(Capsule().stroke(active ? fill : Theme.line, lineWidth: 1.5))
+                .contentShape(Capsule())
         }.buttonStyle(.plain)
+        .accessibilityAddTraits(active ? .isSelected : [])
     }
 }
 
@@ -351,22 +440,21 @@ struct QuickStartRecipesCard: View {
     let onQuickEdit: (String) -> Void
 
     var body: some View {
-        Card(radius: 16) {
-            VStack(alignment: .leading, spacing: 9) {
-                Text("1-Tap AI Editing Recipes").font(.clipz(14.5, .bold)).foregroundStyle(Theme.textWhite)
-                Text("Tap any recipe below to start immediately, or type in the box at the bottom:")
-                    .font(.clipz(12)).foregroundStyle(Theme.textMuted)
-                RecipeRow(tag: "✦ MY STYLE", color: Theme.violet, title: "Draft edit from my past reels (Review habits before sending)", action: onMyStyle)
-                RecipeRow(tag: "✻ BRAINSTORM", color: Theme.blue, title: "Brainstorm hook ideas & pacing safely (no edits made yet)", action: onBrainstorm)
-                RecipeRow(tag: "● AUTO EDIT", color: Theme.coral, title: "Remove silences, add dynamic word captions & upbeat music") {
-                    onQuickEdit("Remove pauses, add viral captions, punch-in zoom on key words, and add upbeat background music.")
-                }
-                RecipeRow(tag: "● CALLOUTS", color: Theme.coral, title: "Add brand/tool logos on keywords + whoosh transitions") {
-                    onQuickEdit("Add logos when tools or brands are named, add punch-in zooms on key moments, and add whoosh SFX.")
-                }
+        VStack(alignment: .leading, spacing: 12) {
+            Eyebrow(text: "One-tap recipes", color: Theme.yellow)
+            Text("Start with a recipe.\nOr just type.").font(.display(22, .black)).tracking(-0.6).foregroundStyle(Theme.paper)
+            Text("Tap a recipe to start straight away, or write your own prompt in the box below.")
+                .font(.ui(14)).foregroundStyle(Theme.muted)
+            RecipeRow(tag: "✦ MY STYLE", color: Theme.paper, title: "Draft an edit from my past reels", sub: "Review the habits before it sends", action: onMyStyle)
+            RecipeRow(tag: "✻ BRAINSTORM", color: Theme.periwinkle, title: "Hook ideas & pacing", sub: "No edits are made yet", action: onBrainstorm)
+            RecipeRow(tag: "● AUTO EDIT", color: Theme.yellow, title: "Cut silences, add captions & music", sub: "Punch-in zooms on key words") {
+                onQuickEdit("Remove pauses, add viral captions, punch-in zoom on key words, and add upbeat background music.")
             }
-            .padding(14)
+            RecipeRow(tag: "● CALLOUTS", color: Theme.yellow, title: "Logos on keywords + whooshes", sub: "Brand and tool names get a visual") {
+                onQuickEdit("Add logos when tools or brands are named, add punch-in zooms on key moments, and add whoosh SFX.")
+            }
         }
+        .padding(.top, 6)
     }
 }
 
@@ -374,23 +462,29 @@ struct RecipeRow: View {
     let tag: String
     let color: Color
     let title: String
+    let sub: String
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                Text(tag).font(.clipz(10, .heavy)).foregroundStyle(color)
-                    .padding(.horizontal, 7).padding(.vertical, 3)
-                    .background(color.opacity(0.16), in: RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(color.opacity(0.45)))
-                Text(title).font(.clipz(12.5)).foregroundStyle(Theme.textWhite).multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text("→").font(.clipz(14, .bold)).foregroundStyle(Theme.textMuted)
+        Button {
+            Haptics.tap()
+            action()
+        } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(tag).font(.mono(10, .bold)).tracking(0.8).foregroundStyle(color)
+                    Text(title).font(.ui(16, .bold)).foregroundStyle(Theme.paper).multilineTextAlignment(.leading)
+                    Text(sub).font(.ui(13)).foregroundStyle(Theme.muted).multilineTextAlignment(.leading)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Text("→").font(.display(18, .bold)).foregroundStyle(color)
             }
-            .padding(.horizontal, 12).padding(.vertical, 10)
-            .background(Theme.surface2, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.border))
-        }.buttonStyle(.plain)
+            .padding(16)
+            .background(Theme.ink2, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Theme.line, lineWidth: 1.5))
+            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
+        .buttonStyle(PressableStyle())
     }
 }
 
@@ -406,47 +500,47 @@ struct FeedMessageBubble: View {
         switch role {
         case "user":
             HStack {
-                Spacer(minLength: 40)
-                Text(text).font(.clipz(13.5)).foregroundStyle(Theme.textWhite).padding(12)
-                    .background(Theme.coral.opacity(0.18),
-                                in: UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 16, bottomTrailingRadius: 4, topTrailingRadius: 16))
-                    .overlay(UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 16, bottomTrailingRadius: 4, topTrailingRadius: 16)
-                        .stroke(Theme.coral.opacity(0.5)))
+                Spacer(minLength: 48)
+                Text(text).font(.ui(15.5, .medium)).foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 14).padding(.vertical, 11)
+                    .background(Theme.yellow,
+                                in: UnevenRoundedRectangle(topLeadingRadius: 20, bottomLeadingRadius: 20, bottomTrailingRadius: 5, topTrailingRadius: 20))
+                    .textSelection(.enabled)
             }
         case "brain":
-            Card(radius: 14, stroke: Theme.blue.opacity(0.45)) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("✻ BRAINSTORM PARTNER").font(.clipz(10.5, .heavy)).foregroundStyle(Theme.blue)
-                    Text(text).font(.clipz(13.5)).foregroundStyle(Theme.textWhite).lineSpacing(4)
+            Card(radius: 20, stroke: Theme.periwinkle.opacity(0.6)) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("✻ BRAINSTORM PARTNER").font(.mono(10.5, .bold)).tracking(1).foregroundStyle(Theme.periwinkle)
+                    Text(text).font(.ui(15.5)).foregroundStyle(Theme.paper).lineSpacing(4).textSelection(.enabled)
                 }
-                .padding(13).frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16).frame(maxWidth: .infinity, alignment: .leading)
             }
         case "assistant":
-            Card(radius: 14, stroke: Theme.coral.opacity(0.45)) {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("● CLIPZ DIRECTOR").font(.clipz(10.5, .heavy)).foregroundStyle(Theme.coral)
-                    Text(text).font(.clipz(13.5)).foregroundStyle(Theme.textWhite).lineSpacing(4)
+            Card(radius: 20, stroke: Theme.yellow.opacity(0.5)) {
+                VStack(alignment: .leading, spacing: 9) {
+                    Text("● CLIPZ DIRECTOR").font(.mono(10.5, .bold)).tracking(1).foregroundStyle(Theme.yellow)
+                    Text(text).font(.ui(15.5)).foregroundStyle(Theme.paper).lineSpacing(4).textSelection(.enabled)
                     if !badges.isEmpty {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 6) {
                                 ForEach(Array(badges.enumerated()), id: \.offset) { _, name in
-                                    Text("✓ \(name)").font(.clipz(10, .bold, mono: true)).foregroundStyle(Theme.green)
-                                        .padding(.horizontal, 7).padding(.vertical, 3)
-                                        .background(Theme.surface2, in: RoundedRectangle(cornerRadius: 6))
-                                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.border))
+                                    Text("✓ \(name)").font(.mono(10.5, .bold)).foregroundStyle(Theme.green)
+                                        .padding(.horizontal, 8).padding(.vertical, 4)
+                                        .background(Theme.green.opacity(0.1), in: Capsule())
                                 }
                             }
                         }
                     }
                 }
-                .padding(13).frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16).frame(maxWidth: .infinity, alignment: .leading)
             }
         default:
-            Text(text).font(.clipz(12)).foregroundStyle(isError ? Color(hex: 0xFFFFB4AB) : Theme.textMuted)
-                .padding(.horizontal, 12).padding(.vertical, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(isError ? Color(hex: 0xFF2F1518) : Theme.surface2, in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(isError ? Theme.red.opacity(0.4) : Theme.border))
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("›").font(.mono(13, .bold)).foregroundStyle(isError ? Theme.red : Theme.yellow)
+                Text(text).font(.mono(12.5)).foregroundStyle(isError ? Theme.red : Theme.muted).lineSpacing(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 4)
         }
     }
 }
@@ -458,20 +552,24 @@ struct FinalPromptCardUI: View {
     let onEditFirst: () -> Void
 
     var body: some View {
-        Card(radius: 16, stroke: Theme.coral, lineWidth: 1.5) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("FINAL PROMPT READY").font(.clipz(11, .heavy)).foregroundStyle(Theme.coral)
-                Text(prompt).font(.clipz(13)).foregroundStyle(Theme.textWhite).padding(11)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Theme.surface2, in: RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.border))
-                HStack(spacing: 8) {
-                    FilledButton(title: "Send to Director", enabled: !busy, action: onSend)
-                    OutlinedBtn(title: "Edit First", enabled: !busy, action: onEditFirst)
-                }
+        VStack(alignment: .leading, spacing: 12) {
+            Text("FINAL PROMPT READY").font(.mono(10.5, .bold)).tracking(1.2).foregroundStyle(Theme.cobalt)
+            Text(prompt).font(.ui(15)).foregroundStyle(Theme.ink).lineSpacing(3)
+                .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Theme.lineLight, lineWidth: 1.5))
+                .textSelection(.enabled)
+            HStack(spacing: 10) {
+                PrimaryButton(title: "Send to Director", enabled: !busy, action: onSend)
+                    .padding([.trailing, .bottom], 4)
+                GhostButton(title: "Edit first", color: Theme.ink, enabled: !busy, action: onEditFirst)
             }
-            .padding(14)
         }
+        .padding(18)
+        .background(Theme.paper, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Theme.ink, lineWidth: 2))
+        .hardShadow(Theme.cobalt, offset: 5, radius: 24)
+        .padding(.trailing, 5).padding(.bottom, 5)
     }
 }
 
@@ -489,45 +587,53 @@ struct StyleCardUI: View {
     @State private var activeRule: String?
 
     var body: some View {
-        Card(radius: 16, stroke: Theme.violet, lineWidth: 1.5) {
-            VStack(alignment: .leading, spacing: 10) {
+        Card(radius: 24, stroke: Theme.paper, lineWidth: 2) {
+            VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text("✦ YOUR STYLE").font(.clipz(11, .heavy)).foregroundStyle(Theme.violet)
+                    Text("✦ YOUR STYLE").font(.mono(10.5, .bold)).tracking(1.2).foregroundStyle(Theme.paper)
                     Spacer()
-                    if submitted { Text("SENT ✓").font(.clipz(11, .bold)).foregroundStyle(Theme.green) }
+                    if submitted { Text("SENT ✓").font(.mono(10.5, .bold)).foregroundStyle(Theme.green) }
                 }
-                Text(note).font(.clipz(12.5)).foregroundStyle(Theme.textWhite)
+                Text(note).font(.ui(14.5)).foregroundStyle(Theme.paper)
 
                 if !habits.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
                             ForEach(habits, id: \.self) { h in
-                                Button { activeRule = activeRule == h.instruction ? nil : h.instruction } label: {
-                                    Text("\(h.label) · \(Int(h.share * 100))%").font(.clipz(11, .semibold)).foregroundStyle(Theme.textWhite)
-                                        .padding(.horizontal, 10).padding(.vertical, 5)
-                                        .background(Theme.violet.opacity(0.16), in: Capsule())
-                                        .overlay(Capsule().stroke(Theme.violet.opacity(0.45)))
+                                let on = activeRule == h.instruction
+                                Button {
+                                    Haptics.select()
+                                    activeRule = on ? nil : h.instruction
+                                } label: {
+                                    Text("\(h.label) · \(Int(h.share * 100))%").font(.ui(12.5, .bold))
+                                        .foregroundStyle(on ? Theme.ink : Theme.paper)
+                                        .padding(.horizontal, 12).frame(height: 34)
+                                        .background(on ? Theme.paper : .clear, in: Capsule())
+                                        .overlay(Capsule().stroke(Theme.paper.opacity(0.6), lineWidth: 1.5))
+                                        .contentShape(Capsule())
                                 }.buttonStyle(.plain)
                             }
                         }
                     }
                     if let rule = activeRule, !rule.isEmpty {
-                        Text("Habit rule: \(rule)").font(.clipz(11.5)).foregroundStyle(Theme.violet)
+                        Text("Habit rule: \(rule)").font(.ui(13)).foregroundStyle(Theme.muted)
                     }
                 }
 
                 if prompt != nil {
                     StyledCapsuleInput(text: Binding(get: { draft }, set: { if $0.count <= 2000 { draft = $0 } }),
-                                       placeholder: "Customize style prompt…", accent: Theme.violet, maxLines: 5)
+                                       placeholder: "Customize style prompt…", accent: Theme.paper, maxLines: 5)
                     if !submitted {
-                        HStack(spacing: 8) {
-                            FilledButton(title: "Send to Director", enabled: !busy && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) { onSend(draft) }
-                            OutlinedBtn(title: "Discard", color: Theme.textMuted, enabled: !busy, action: onDiscard)
+                        HStack(spacing: 10) {
+                            PrimaryButton(title: "Send to Director", enabled: !busy && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                                          shadow: Theme.cobalt) { onSend(draft) }
+                                .padding([.trailing, .bottom], 4)
+                            GhostButton(title: "Discard", color: Theme.muted, enabled: !busy, action: onDiscard)
                         }
                     }
                 }
             }
-            .padding(14)
+            .padding(18)
         }
         .animation(.easeInOut(duration: 0.2), value: activeRule)
         .onAppear { draft = prompt ?? "" }
@@ -538,32 +644,31 @@ struct PlanCardUI: View {
     let plan: EditPlan
 
     var body: some View {
-        Card(radius: 14) {
-            VStack(alignment: .leading, spacing: 7) {
-                Text("DIRECTOR EDIT PLAN").font(.clipz(10.5, .heavy)).foregroundStyle(Theme.coral)
+        Card(radius: 20) {
+            VStack(alignment: .leading, spacing: 9) {
+                Text("DIRECTOR EDIT PLAN").font(.mono(10.5, .bold)).tracking(1).foregroundStyle(Theme.yellow)
                 if !plan.summary.isEmpty {
-                    Text(plan.summary).font(.clipz(13, .semibold)).foregroundStyle(Theme.textWhite)
+                    Text(plan.summary).font(.ui(15.5, .bold)).foregroundStyle(Theme.paper)
                 }
                 ForEach(Array(plan.steps.enumerated()), id: \.offset) { i, s in
-                    HStack(alignment: .top, spacing: 6) {
-                        Text("\(i + 1).").font(.clipz(12, .bold)).foregroundStyle(Theme.coral)
-                        Text(s).font(.clipz(12.5)).foregroundStyle(Theme.textWhite)
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text(String(format: "%02d", i + 1)).font(.mono(11.5, .bold)).foregroundStyle(Theme.yellow)
+                        Text(s).font(.ui(14.5)).foregroundStyle(Theme.paper)
                     }
                 }
                 if !plan.moments.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
                             ForEach(plan.moments, id: \.self) { m in
-                                Text("\(m.atWord) → \(m.show)").font(.clipz(11, mono: true)).foregroundStyle(Theme.textWhite)
-                                    .padding(.horizontal, 8).padding(.vertical, 4)
-                                    .background(Theme.surface2, in: RoundedRectangle(cornerRadius: 8))
-                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border))
+                                Text("\(m.atWord) → \(m.show)").font(.mono(11.5)).foregroundStyle(Theme.paper)
+                                    .padding(.horizontal, 10).padding(.vertical, 5)
+                                    .background(Theme.ink3, in: Capsule())
                             }
                         }
                     }
                 }
             }
-            .padding(13).frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16).frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -576,23 +681,27 @@ struct ToolStepPill: View {
 
     var body: some View {
         let dot = status == "ok" ? Theme.green : status == "fail" ? Theme.red : Theme.yellow
-        Card(radius: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 7) {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                if status == "run" {
+                    ProgressView().controlSize(.mini).tint(Theme.yellow)
+                } else {
                     Circle().fill(dot).frame(width: 8, height: 8)
-                    Text(name).font(.clipz(11.5, .bold, mono: true)).foregroundStyle(Theme.textWhite)
-                    if !args.isEmpty {
-                        Text(args).font(.clipz(10.5, mono: true)).foregroundStyle(Theme.textMuted).lineLimit(1)
-                    }
                 }
-                if let result, !result.isEmpty {
-                    Text("⎿ \(result)").font(.clipz(11, mono: true))
-                        .foregroundStyle(status == "fail" ? Theme.red : Theme.textMuted)
-                        .padding(.leading, 15)
+                Text(name).font(.mono(12.5, .bold)).foregroundStyle(Theme.yellow)
+                if !args.isEmpty {
+                    Text(args).font(.mono(11)).foregroundStyle(Theme.muted).lineLimit(1)
                 }
             }
-            .padding(.horizontal, 11).padding(.vertical, 8).frame(maxWidth: .infinity, alignment: .leading)
+            if let result, !result.isEmpty {
+                Text("⎿ \(result)").font(.mono(11.5)).foregroundStyle(status == "fail" ? Theme.red : Theme.green)
+                    .padding(.leading, 16)
+            }
         }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.ink2, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Theme.line, lineWidth: 1))
     }
 }
 
@@ -604,21 +713,31 @@ struct AskCardUI: View {
     let onPick: (String) -> Void
 
     var body: some View {
-        Card(radius: 14, stroke: Theme.blue) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("DIRECTOR QUESTION").font(.clipz(10.5, .heavy)).foregroundStyle(Theme.blue)
-                Text(question).font(.clipz(13)).foregroundStyle(Theme.textWhite)
+        Card(radius: 22, stroke: Theme.periwinkle, lineWidth: 2) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("DIRECTOR QUESTION").font(.mono(10.5, .bold)).tracking(1).foregroundStyle(Theme.periwinkle)
+                Text(question).font(.ui(15.5, .medium)).foregroundStyle(Theme.paper).lineSpacing(3)
                 ForEach(options, id: \.self) { opt in
-                    Button { onPick(opt) } label: {
-                        Text(opt).font(.clipz(12)).foregroundStyle(Theme.textWhite)
-                            .frame(maxWidth: .infinity).padding(.vertical, 9)
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border))
-                            .opacity(busy || selected != nil ? 0.4 : 1)
+                    let chosen = selected == opt
+                    Button {
+                        Haptics.tap()
+                        onPick(opt)
+                    } label: {
+                        Text(opt).font(.ui(14.5, .bold)).foregroundStyle(chosen ? Theme.ink : Theme.paper)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16).padding(.vertical, 12)
+                            .background(chosen ? Theme.yellow : .clear, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(chosen ? Theme.yellow : Theme.line, lineWidth: 1.5))
+                            .opacity(selected != nil && !chosen ? 0.4 : 1)
+                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain).disabled(busy || selected != nil)
+                    .buttonStyle(.plain)
+                    .disabled(busy || selected != nil)
                 }
             }
-            .padding(13).frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16).frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -628,14 +747,22 @@ struct CriticCardUI: View {
     let issues: [String]
 
     var body: some View {
-        Card(radius: 14, stroke: Theme.green.opacity(0.45)) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("CRITIC · \(score)/10").font(.clipz(11, .heavy)).foregroundStyle(Theme.green)
+        Card(radius: 20, stroke: Theme.green.opacity(0.5)) {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("CRITIC").font(.mono(10.5, .bold)).tracking(1).foregroundStyle(Theme.green)
+                    Spacer()
+                    Text(score).font(.display(22, .black)).foregroundStyle(Theme.green)
+                    Text("/10").font(.mono(12)).foregroundStyle(Theme.muted)
+                }
                 ForEach(Array(issues.enumerated()), id: \.offset) { _, issue in
-                    Text("• \(issue)").font(.clipz(12)).foregroundStyle(Theme.textWhite)
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text("•").foregroundStyle(Theme.green)
+                        Text(issue).font(.ui(14)).foregroundStyle(Theme.paper)
+                    }
                 }
             }
-            .padding(13).frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16).frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -646,21 +773,25 @@ struct CreditsCardUI: View {
 
     var body: some View {
         let joined = credits.joined(separator: "\n")
-        Card(radius: 14) {
-            VStack(alignment: .leading, spacing: 6) {
+        Card(radius: 20) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("CREDITS FOR YOUR CAPTION").font(.clipz(10.5, .heavy)).foregroundStyle(Theme.coral)
+                    Text("CREDITS FOR YOUR CAPTION").font(.mono(10.5, .bold)).tracking(1).foregroundStyle(Theme.yellow)
                     Spacer()
                     Button {
                         UIPasteboard.general.string = joined
+                        Haptics.success()
                         onCopy()
                     } label: {
-                        Text("Copy").font(.clipz(11.5, .bold)).foregroundStyle(Theme.coral)
+                        Text("Copy").font(.ui(13, .bold)).foregroundStyle(Theme.ink)
+                            .padding(.horizontal, 14).frame(height: 32)
+                            .background(Theme.yellow, in: Capsule())
+                            .contentShape(Capsule())
                     }.buttonStyle(.plain)
                 }
-                Text(joined).font(.clipz(11.5, mono: true)).foregroundStyle(Theme.textMuted)
+                Text(joined).font(.mono(12)).foregroundStyle(Theme.muted).textSelection(.enabled)
             }
-            .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16).frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -669,48 +800,85 @@ struct CreditsCardUI: View {
 
 struct StudioTranscriptSection: View {
     @Bindable var vm: ClipzViewModel
+    @State private var query = ""
+
+    private var filtered: [Word] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return [] }
+        return vm.words.filter { $0.text.lowercased().contains(q) || $0.id.lowercased() == q }
+    }
 
     var body: some View {
-        VStack(spacing: 10) {
-            Card(radius: 12) {
-                Text("Tap any spoken word below to insert its word ID (e.g. w64, w138) into your Director prompt.")
-                    .font(.clipz(12)).foregroundStyle(Theme.textMuted).padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        VStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Tap a word to drop its ID (like w64) into your Director prompt.")
+                    .font(.ui(14)).foregroundStyle(Theme.muted)
+                if !vm.words.isEmpty {
+                    StyledCapsuleInput(text: $query, placeholder: "Search words or IDs", singleLine: true)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if vm.words.isEmpty {
                 Spacer()
-                Text("No transcript yet.").font(.clipz(13)).foregroundStyle(Theme.textMuted)
+                VStack(spacing: 8) {
+                    Text("No transcript yet").font(.display(16, .bold)).foregroundStyle(Theme.paper)
+                    Text("It appears once the video has been analysed.").font(.ui(14)).foregroundStyle(Theme.muted)
+                }
                 Spacer()
+            } else if !query.trimmingCharacters(in: .whitespaces).isEmpty {
+                ScrollView {
+                    if filtered.isEmpty {
+                        Text("No matches").font(.mono(12)).foregroundStyle(Theme.muted).padding(.top, 24)
+                    } else {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 8)], alignment: .leading, spacing: 8) {
+                            ForEach(filtered) { w in WordChip(word: w) { vm.insertWordId(w.id, text: w.text) } }
+                        }
+                    }
+                }
+                .scrollDismissesKeyboard(.interactively)
             } else {
                 let chunks = stride(from: 0, to: vm.words.count, by: 7).map { Array(vm.words[$0..<min($0 + 7, vm.words.count)]) }
                 ScrollView {
-                    LazyVStack(spacing: 8) {
+                    LazyVStack(spacing: 10) {
                         ForEach(chunks, id: \.first?.id) { line in
-                            Card(radius: 12) {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(String(format: "%.1fs", line[0].start)).font(.clipz(11, .bold, mono: true)).foregroundStyle(Theme.coral)
+                            Card(radius: 18) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(String(format: "%.1fs", line[0].start)).font(.mono(11, .bold)).foregroundStyle(Theme.yellow)
                                     ScrollView(.horizontal, showsIndicators: false) {
-                                        HStack(spacing: 6) {
-                                            ForEach(line) { w in
-                                                Button { vm.insertWordId(w.id, text: w.text) } label: {
-                                                    (Text(w.text + " ").font(.clipz(13)).foregroundColor(Theme.textWhite)
-                                                     + Text(w.id).font(.clipz(9.5, .bold, mono: true)).foregroundColor(Theme.coral).baselineOffset(5))
-                                                        .padding(.horizontal, 9).padding(.vertical, 6)
-                                                        .background(Theme.surface2, in: RoundedRectangle(cornerRadius: 8))
-                                                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border))
-                                                }.buttonStyle(.plain)
-                                            }
+                                        HStack(spacing: 8) {
+                                            ForEach(line) { w in WordChip(word: w) { vm.insertWordId(w.id, text: w.text) } }
                                         }
                                     }
                                 }
-                                .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(12).frame(maxWidth: .infinity, alignment: .leading)
                             }
                         }
                     }
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
         }
-        .padding(14)
+        .padding(.horizontal, 16).padding(.top, 4)
+    }
+}
+
+struct WordChip: View {
+    let word: Word
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            Haptics.select()
+            action()
+        } label: {
+            (Text(word.text + " ").font(.ui(15, .medium)).foregroundColor(Theme.paper)
+             + Text(word.id).font(.mono(9.5, .bold)).foregroundColor(Theme.yellow).baselineOffset(5))
+                .padding(.horizontal, 12).frame(minHeight: 40)
+                .background(Theme.ink3, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(PressableStyle())
     }
 }
 
@@ -721,58 +889,74 @@ struct StudioTimelineSection: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 8) {
-                    OutlinedBtn(title: "↶ Undo", size: 12, weight: .semibold, enabled: !vm.busy) { vm.performUndo() }
-                    OutlinedBtn(title: "↷ Redo", size: 12, weight: .semibold, enabled: !vm.busy) { vm.performRedo() }
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 10) {
+                    GhostButton(title: "↶ Undo", enabled: !vm.busy) { vm.performUndo() }
+                    GhostButton(title: "↷ Redo", enabled: !vm.busy) { vm.performRedo() }
                     Spacer()
-                    FilledButton(title: "Export", enabled: !vm.busy) { vm.runEdit("export the final video") }
+                    PrimaryButton(title: "Export", enabled: !vm.busy, shadow: Theme.cobalt) { vm.runEdit("export the final video") }
+                        .padding([.trailing, .bottom], 4)
                 }
 
-                Card(radius: 14) {
-                    VStack(alignment: .leading, spacing: 8) {
+                Card(radius: 22) {
+                    VStack(alignment: .leading, spacing: 10) {
                         HStack {
-                            Text("TIMELINE SUMMARY").font(.clipz(11, .heavy)).foregroundStyle(Theme.coral)
+                            Text("TIMELINE SUMMARY").font(.mono(10.5, .bold)).tracking(1).foregroundStyle(Theme.yellow)
                             Spacer()
                             if let src = vm.sourceVideo {
                                 let w = src.width.map(String.init) ?? "?"
                                 let h = src.height.map(String.init) ?? "?"
                                 let d = src.durationS.map { String(format: "%.1fs", $0) } ?? ""
-                                Text("\(w)×\(h) · \(d)").font(.clipz(11, mono: true)).foregroundStyle(Theme.textMuted)
+                                Text("\(w)×\(h) · \(d)").font(.mono(11)).foregroundStyle(Theme.muted)
                             }
                         }
-                        Text(vm.summary).font(.clipz(12, mono: true)).foregroundStyle(Theme.textWhite).lineSpacing(4)
+                        Text(vm.summary).font(.mono(12.5)).foregroundStyle(Theme.paper).lineSpacing(5).textSelection(.enabled)
                     }
-                    .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(18).frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                Text("RENDERS (\(vm.renders.count))").font(.clipz(11, .bold)).foregroundStyle(Theme.textMuted)
+                HStack {
+                    Eyebrow(text: "Renders", color: Theme.yellow)
+                    Text("\(vm.renders.count)").font(.mono(11, .bold)).foregroundStyle(Theme.ink)
+                        .padding(.horizontal, 8).padding(.vertical, 2).background(Theme.yellow, in: Capsule())
+                }
+
                 if vm.renders.isEmpty {
-                    Text("Nothing rendered yet.").font(.clipz(12.5)).foregroundStyle(Theme.textMuted)
+                    Text("Nothing rendered yet. Ask the Director for an edit, or tap Export.")
+                        .font(.ui(14)).foregroundStyle(Theme.muted)
                 } else {
                     ForEach(vm.renders) { r in
-                        Card(radius: 12) {
-                            HStack(spacing: 10) {
-                                VStack(alignment: .leading, spacing: 2) {
+                        Card(radius: 20) {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 6) {
                                     HStack(spacing: 8) {
-                                        Text(r.profile).font(.clipz(13, .bold)).foregroundStyle(Theme.textWhite)
+                                        Text(r.profile).font(.display(14, .bold)).foregroundStyle(Theme.paper)
                                         StatusPill(status: r.status)
                                     }
-                                    Text(formatTimestamp(r.createdAt)).font(.clipz(11)).foregroundStyle(Theme.textMuted)
+                                    Text(formatTimestamp(r.createdAt)).font(.mono(10.5)).foregroundStyle(Theme.muted)
                                 }
                                 Spacer()
                                 if let url = r.url {
-                                    OutlinedBtn(title: "▶ Play", color: Theme.coral, stroke: Theme.coral, size: 11.5, weight: .bold, radius: 8) {
+                                    Button {
+                                        Haptics.tap()
                                         vm.playRenderVideo(url)
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            VectorIcon(kind: .play, size: 12, color: Theme.ink)
+                                            Text("Play").font(.display(11, .bold)).foregroundStyle(Theme.ink)
+                                        }
+                                        .padding(.horizontal, 14).frame(height: 38)
                                     }
+                                    .buttonStyle(BrutalButtonStyle(fill: Theme.yellow, shadow: Theme.cobalt, offset: 3))
+                                    .padding([.trailing, .bottom], 3)
                                 }
                             }
-                            .padding(12)
+                            .padding(14)
                         }
                     }
                 }
             }
-            .padding(14)
+            .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 28)
         }
     }
 }
